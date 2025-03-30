@@ -1,0 +1,6 @@
+together
+python-dotenv
+pymongo
+coloroma
+Flask
+Flask-Cors

@@ -1,0 +1,56 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SkyQuery - Flight Information</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-plane"></i>
+                <h1>SkyQuery</h1>
+            </div>
+            <p class="tagline">Your AI-powered flight assistant</p>
+        </header>
+
+        <main>
+            <div class="chat-container">
+                <div class="messages" id="chat-messages">
+                    <div class="message bot-message">
+                        <div class="avatar">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="content">
+                            <p>Hello! I'm SkyBot, your flight information assistant. How can I help you today?</p>
+                            <p class="suggestions">Try asking about:</p>
+                            <div class="suggestion-chips">
+                                <button class="suggestion-chip" onclick="sendSuggestion('When does Flight AI123 depart?')">Flight AI123 status</button>
+                                <button class="suggestion-chip" onclick="sendSuggestion('Show me flights to Dubai')">Flights to Dubai</button>
+                                <button class="suggestion-chip" onclick="sendSuggestion('What is the status of Flight EK500?')">Flight EK500 status</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="input-area">
+                    <input type="text" id="user-input" placeholder="Ask about a flight..." autocomplete="off">
+                    <button id="send-button">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>© 2023 SkyQuery - Flight Information System</p>
+        </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
