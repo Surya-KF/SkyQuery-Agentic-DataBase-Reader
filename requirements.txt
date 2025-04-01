@@ -1,6 +1,6 @@
+flask 
 together
-python-dotenv
+flask-cors
+bcrypt
+werkzeug
 pymongo
-coloroma
-Flask
-Flask-Cors

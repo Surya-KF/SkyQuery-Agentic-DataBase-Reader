@@ -7,139 +7,153 @@ document.addEventListener('DOMContentLoaded', function() {
     // Function to add a message to the chat
     function addMessage(message, isUser = false) {
         const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+        messageDiv.classList.add('message');
         
-        const avatarDiv = document.createElement('div');
-        avatarDiv.className = 'avatar';
-        
-        const avatarIcon = document.createElement('i');
-        avatarIcon.className = isUser ? 'fas fa-user' : 'fas fa-robot';
-        avatarDiv.appendChild(avatarIcon);
-        
-        const contentDiv = document.createElement('div');
-        contentDiv.className = 'content';
-        
-        // Handle HTML content from server (for <br> tags)
-        contentDiv.innerHTML = message;
-        
-        messageDiv.appendChild(avatarDiv);
-        messageDiv.appendChild(contentDiv);
+        if (isUser) {
+            messageDiv.classList.add('user-message');
+            messageDiv.innerHTML = `
+                <div class="avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="content">
+                    <p>${message}</p>
+                </div>
+            `;
+        } else {
+            messageDiv.classList.add('bot-message');
+            messageDiv.innerHTML = `
+                <div class="avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="content">
+                    <p>${message}</p>
+                </div>
+            `;
+        }
         
         chatMessages.appendChild(messageDiv);
-        
-        // Scroll to the bottom of the chat
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    // Function to display flight data in a nice card format
-    function displayFlightData(flightData) {
-        let statusClass = '';
-        
-        if (flightData.status.toLowerCase() === 'on time') {
-            statusClass = 'status-on-time';
-        } else if (flightData.status.toLowerCase() === 'delayed') {
-            statusClass = 'status-delayed';
-        } else if (flightData.status.toLowerCase() === 'boarding') {
-            statusClass = 'status-boarding';
-        }
-        
-        return `
-            <div class="flight-card">
-                <div class="flight-header">
-                    <span class="flight-number">${flightData.flight_number}</span>
-                    <span class="flight-status ${statusClass}">${flightData.status}</span>
-                </div>
-                <div class="flight-details">
-                    <div class="flight-destination">
-                        <i class="fas fa-plane-arrival"></i> ${flightData.destination}
-                    </div>
-                    <div class="flight-time">
-                        <i class="far fa-clock"></i> ${flightData.departure_time}
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    // Function to display multiple flights
-    function displayFlightsList(flights) {
-        let html = '';
-        
-        flights.forEach(flight => {
-            html += displayFlightData(flight);
-        });
-        
-        return html;
-    }
-
-    // Function to send a message to the server
+    // Function to handle sending a message
     function sendMessage() {
         const message = userInput.value.trim();
         
-        if (message === '') return;
-        
-        // Add user message to chat
-        addMessage(message, true);
-        
-        // Clear input field
-        userInput.value = '';
-        
-        // Show loading indicator
-        const loadingDiv = document.createElement('div');
-        loadingDiv.className = 'message bot-message';
-        loadingDiv.innerHTML = `
-            <div class="avatar">
-                <i class="fas fa-robot"></i>
-            </div>
-            <div class="content">
-                <p><i class="fas fa-spinner fa-spin"></i> Searching for flight information...</p>
-            </div>
-        `;
-        chatMessages.appendChild(loadingDiv);
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-        
-        // Send request to server
-        fetch('/api/chat', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ message: message }),
-        })
-        .then(response => response.json())
-        .then(data => {
-            // Remove loading indicator
-            chatMessages.removeChild(loadingDiv);
+        if (message) {
+            // Add user message to chat
+            addMessage(message, true);
             
-            // Add bot response
-            let responseHTML = data.answer;
+            // Clear input field
+            userInput.value = '';
             
-            // If there's flight data, display it in a card
-            if (data.flight_data) {
-                responseHTML += displayFlightData(data.flight_data);
-            }
+            // Show loading indicator
+            const loadingDiv = document.createElement('div');
+            loadingDiv.classList.add('message', 'bot-message', 'loading-message');
+            loadingDiv.innerHTML = `
+                <div class="avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="content">
+                    <p>Thinking...</p>
+                </div>
+            `;
+            chatMessages.appendChild(loadingDiv);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
             
-            // If there's a list of flights, display them
-            if (data.flights_list && data.flights_list.length > 0) {
-                responseHTML += displayFlightsList(data.flights_list);
-            }
-            
-            addMessage(responseHTML);
-        })
-        .catch(error => {
-            // Remove loading indicator
-            chatMessages.removeChild(loadingDiv);
-            
-            // Show error message
-            addMessage('Sorry, there was an error processing your request. Please try again.');
-            console.error('Error:', error);
-        });
+            // Send message to server
+            fetch('/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ message: message })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        // Redirect to login if unauthorized
+                        window.location.href = '/login';
+                        throw new Error('Please login to continue');
+                    }
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Remove loading message
+                chatMessages.removeChild(loadingDiv);
+                
+                // Add bot response to chat
+                addMessage(data.answer);
+                
+                // If there's flight data, display it in a card
+                if (data.flight_data) {
+                    displayFlightCard(data.flight_data);
+                }
+                
+                // If there's a flights list, display them
+                if (data.flights_list && data.flights_list.length > 0) {
+                    data.flights_list.forEach(flight => {
+                        displayFlightCard(flight);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                
+                // Remove loading message
+                if (document.querySelector('.loading-message')) {
+                    chatMessages.removeChild(loadingDiv);
+                }
+                
+                // Add error message
+                addMessage('Sorry, I encountered an error. Please try again later.');
+            });
+        }
     }
 
-    // Function to handle suggestion clicks
-    function sendSuggestion(suggestion) {
-        userInput.value = suggestion;
-        sendMessage();
+    // Function to display a flight card
+    function displayFlightCard(flightData) {
+        const flightCard = document.createElement('div');
+        flightCard.classList.add('message', 'bot-message');
+        
+        // Determine status class
+        let statusClass = 'status-on-time';
+        if (flightData.status) {
+            const status = flightData.status.toLowerCase();
+            if (status.includes('delay')) {
+                statusClass = 'status-delayed';
+            } else if (status.includes('board')) {
+                statusClass = 'status-boarding';
+            } else if (status.includes('cancel')) {
+                statusClass = 'status-cancelled';
+            }
+        }
+        
+        flightCard.innerHTML = `
+            <div class="avatar">
+                <i class="fas fa-plane"></i>
+            </div>
+            <div class="content">
+                <div class="flight-card">
+                    <div class="flight-header">
+                        <span class="flight-number">${flightData.flight_number}</span>
+                        <span class="flight-status ${statusClass}">${flightData.status}</span>
+                    </div>
+                    <div class="flight-details">
+                        <div class="flight-destination">
+                            <i class="fas fa-map-marker-alt"></i> ${flightData.origin || 'N/A'} → ${flightData.destination || 'N/A'}
+                        </div>
+                        <div class="flight-time">
+                            <i class="far fa-clock"></i> ${flightData.departure_time || 'N/A'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        chatMessages.appendChild(flightCard);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
     // Event listener for send button
@@ -151,6 +165,12 @@ document.addEventListener('DOMContentLoaded', function() {
             sendMessage();
         }
     });
+
+    // Function to handle suggestion clicks
+    function sendSuggestion(suggestion) {
+        userInput.value = suggestion;
+        sendMessage();
+    }
 
     // Make sendSuggestion available globally
     window.sendSuggestion = sendSuggestion;

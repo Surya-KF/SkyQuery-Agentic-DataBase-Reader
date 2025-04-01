@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for, session, flash
 import json
 import os
 import re
@@ -7,6 +7,8 @@ from together import Together
 from pymongo import MongoClient
 import urllib.parse
 from datetime import datetime
+import bcrypt
+from functools import wraps
 
 # Load environment variables
 load_dotenv()
@@ -17,7 +19,132 @@ MONGO_PASSWORD = urllib.parse.quote_plus(os.getenv("MONGO_PASSWORD"))
 MONGO_URI = f"mongodb+srv://suryakf1974:{MONGO_PASSWORD}@cluster0.pgvt85f.mongodb.net/Flights?retryWrites=true&w=majority&appName=Cluster0"
 
 # Initialize Flask app
+
+
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY", "your-secret-key-for-sessions")
+
+# User authentication functions
+def get_db_connection():
+    """Returns a connection to MongoDB"""
+    return MongoClient(MONGO_URI)
+
+def register_user(username, email, password):
+    """Register a new user in the database"""
+    try:
+        mongo_client = get_db_connection()
+        db = mongo_client["Flights"]
+        users_collection = db["users"]
+        
+        # Check if username already exists
+        if users_collection.find_one({"username": username}):
+            return False, "Username already exists"
+        
+        # Check if email already exists
+        if users_collection.find_one({"email": email}):
+            return False, "Email already exists"
+        
+        # Hash the password
+        hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+        
+        # Create user document
+        user = {
+            "username": username,
+            "email": email,
+            "password": hashed_password,
+            "role": "user",
+            "created_at": datetime.now()
+        }
+        
+        # Insert user into database
+        users_collection.insert_one(user)
+        return True, "User registered successfully"
+    except Exception as e:
+        print(f"Registration error: {e}")
+        return False, "An error occurred during registration"
+    finally:
+        mongo_client.close()
+
+def authenticate_user(username, password):
+    """Authenticate a user with username and password"""
+    try:
+        mongo_client = get_db_connection()
+        db = mongo_client["Flights"]
+        users_collection = db["users"]
+        
+        # Find user by username
+        user = users_collection.find_one({"username": username})
+        
+        if not user:
+            return False, "Invalid username or password"
+        
+        # Check password
+        if bcrypt.checkpw(password.encode('utf-8'), user['password']):
+            # Return user data without password
+            user_data = {
+                "username": user["username"],
+                "email": user.get("email", ""),
+                "role": user.get("role", "user")
+            }
+            return True, user_data
+        else:
+            return False, "Invalid username or password"
+    except Exception as e:
+        print(f"Authentication error: {e}")
+        return False, "An error occurred during authentication"
+    finally:
+        mongo_client.close()
+
+# Create admin user if not exists
+def create_admin_user():
+    try:
+        mongo_client = get_db_connection()
+        db = mongo_client["Flights"]
+        users_collection = db["users"]
+        
+        # Check if admin exists
+        admin = users_collection.find_one({"username": "Admin"})
+        
+        if not admin:
+            # Hash the password
+            hashed_password = bcrypt.hashpw("Password@12345678910".encode('utf-8'), bcrypt.gensalt())
+            
+            # Create admin document
+            admin_user = {
+                "username": "Admin",
+                "email": "admin@skybot.com",
+                "password": hashed_password,
+                "role": "admin",
+                "created_at": datetime.now()
+            }
+            
+            # Insert admin into database
+            users_collection.insert_one(admin_user)
+            print("Admin user created successfully")
+    except Exception as e:
+        print(f"Admin creation error: {e}")
+    finally:
+        mongo_client.close()
+
+# Login required decorator
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session:
+            flash('Please log in to access this page', 'error')
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# Admin required decorator
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user' not in session or session['user'].get('role') != 'admin':
+            flash('Admin access required', 'error')
+            return redirect(url_for('index'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 def get_flight_info(flight_number: str) -> dict:
     """Retrieves structured flight data for a given flight number from MongoDB."""
@@ -53,6 +180,8 @@ def get_flights_by_destination(destination: str) -> list:
         flights = list(flights_collection.find(
             {"destination": {"$regex": f"^{destination}$", "$options": "i"}}
         ))
+
+    
 
         # If exact match returns no results, try partial match
         if not flights:
@@ -268,12 +397,249 @@ def generate_chatbot_response(user_query: str) -> dict:
         print(f"Processing flight query: {query_lower}")
         return qa_agent_respond(user_query)
 
+def add_flight(flight_data):
+    """Add a new flight to the database"""
+    try:
+        mongo_client = get_db_connection()
+        db = mongo_client["Flights"]
+        flights_collection = db["flights"]
+        
+        # Check if flight number already exists
+        if flights_collection.find_one({"flight_number": flight_data["flight_number"]}):
+            return False, "Flight number already exists"
+        
+        # Insert flight into database
+        flights_collection.insert_one(flight_data)
+        return True, "Flight added successfully"
+    except Exception as e:
+        print(f"Add flight error: {e}")
+        return False, f"An error occurred: {str(e)}"
+    finally:
+        mongo_client.close()
+
+def update_flight(flight_number, updated_data):
+    """Update an existing flight in the database"""
+    try:
+        mongo_client = get_db_connection()
+        db = mongo_client["Flights"]
+        flights_collection = db["flights"]
+        
+        # Check if flight exists
+        if not flights_collection.find_one({"flight_number": flight_number}):
+            return False, "Flight not found"
+        
+        # Update flight
+        result = flights_collection.update_one(
+            {"flight_number": flight_number},
+            {"$set": updated_data}
+        )
+        
+        if result.modified_count > 0:
+            return True, "Flight updated successfully"
+        else:
+            return False, "No changes made to the flight"
+    except Exception as e:
+        print(f"Update flight error: {e}")
+        return False, f"An error occurred: {str(e)}"
+    finally:
+        mongo_client.close()
+
+def delete_flight(flight_number):
+    """Delete a flight from the database"""
+    try:
+        mongo_client = get_db_connection()
+        db = mongo_client["Flights"]
+        flights_collection = db["flights"]
+        
+        # Check if flight exists
+        if not flights_collection.find_one({"flight_number": flight_number}):
+            return False, "Flight not found"
+        
+        # Delete flight
+        result = flights_collection.delete_one({"flight_number": flight_number})
+        
+        if result.deleted_count > 0:
+            return True, "Flight deleted successfully"
+        else:
+            return False, "Failed to delete flight"
+    except Exception as e:
+        print(f"Delete flight error: {e}")
+        return False, f"An error occurred: {str(e)}"
+    finally:
+        mongo_client.close()
+
 # Routes
 @app.route('/')
 def index():
     return render_template('index.html')
 
+@app.route('/chatbot')
+@login_required
+def chatbot():
+    return render_template('chatbot.html')
+    
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        
+        # Basic validation
+        if not username or not email or not password:
+            flash('All fields are required', 'error')
+            return render_template('register.html')
+        
+        # Register user
+        success, message = register_user(username, email, password)
+        
+        if success:
+            flash('Registration successful! Please log in.', 'success')
+            return redirect(url_for('login'))
+        else:
+            flash(message, 'error')
+            return render_template('register.html')
+    
+    return render_template('register.html')
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        # Basic validation
+        if not username or not password:
+            flash('Username and password are required', 'error')
+            return render_template('login.html')
+        
+        # Authenticate user
+        success, user_data = authenticate_user(username, password)
+        
+        if success:
+            # Store user in session
+            session['user'] = user_data
+            
+            # Redirect to admin dashboard if admin
+            if user_data.get('role') == 'admin':
+                return redirect(url_for('admin_dashboard'))
+            
+            # Redirect to user dashboard
+            flash(f'Welcome back, {username}!', 'success')
+            return redirect(url_for('chatbot'))
+        else:
+            flash(user_data, 'error')  # user_data contains error message
+            return render_template('login.html')
+    
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    session.pop('user', None)
+    flash('You have been logged out', 'success')
+    return redirect(url_for('login'))
+
+@app.route('/dashboard')
+@login_required
+def dashboard():
+    # Get today's flights
+    today_flights = get_flights_for_today()
+    return render_template('dashboard.html', flights=today_flights)
+
+@app.route('/admin')
+@login_required
+@admin_required
+def admin_dashboard():
+    # Get all flights for admin view
+    all_flights = get_all_flights()
+    return render_template('admin.html', flights=all_flights)
+
+@app.route('/admin/flights/add', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_add_flight():
+    if request.method == 'POST':
+        # Get flight data from form
+        flight_data = {
+            "flight_number": request.form.get('flight_number'),
+            "airline": request.form.get('airline'),
+            "departure_date": request.form.get('departure_date'),
+            "departure_time": request.form.get('departure_time'),
+            "origin": request.form.get('origin'),
+            "destination": request.form.get('destination'),
+            "status": request.form.get('status', 'On Time')
+        }
+        
+        # Basic validation
+        if not all([flight_data["flight_number"], flight_data["airline"], 
+                   flight_data["departure_date"], flight_data["departure_time"],
+                   flight_data["origin"], flight_data["destination"]]):
+            flash('All fields are required', 'error')
+            return render_template('add_flight.html')
+        
+        # Add flight
+        success, message = add_flight(flight_data)
+        
+        if success:
+            flash(message, 'success')
+            return redirect(url_for('admin_dashboard'))
+        else:
+            flash(message, 'error')
+            return render_template('add_flight.html')
+    
+    return render_template('add_flight.html')
+
+@app.route('/admin/flights/edit/<flight_number>', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_edit_flight(flight_number):
+    # Get flight data
+    flight_info = get_flight_info(flight_number)
+    
+    if flight_info.get('status') == 'Not Found':
+        flash('Flight not found', 'error')
+        return redirect(url_for('admin_dashboard'))
+    
+    if request.method == 'POST':
+        # Get updated flight data from form
+        updated_data = {
+            "airline": request.form.get('airline'),
+            "departure_date": request.form.get('departure_date'),
+            "departure_time": request.form.get('departure_time'),
+            "origin": request.form.get('origin'),
+            "destination": request.form.get('destination'),
+            "status": request.form.get('status')
+        }
+        
+        # Update flight
+        success, message = update_flight(flight_number, updated_data)
+        
+        if success:
+            flash(message, 'success')
+            return redirect(url_for('admin_dashboard'))
+        else:
+            flash(message, 'error')
+            return render_template('edit_flight.html', flight=flight_info)
+    
+    return render_template('edit_flight.html', flight=flight_info)
+
+@app.route('/admin/flights/delete/<flight_number>', methods=['POST'])
+@login_required
+@admin_required
+def admin_delete_flight(flight_number):
+    # Delete flight
+    success, message = delete_flight(flight_number)
+    
+    if success:
+        flash(message, 'success')
+    else:
+        flash(message, 'error')
+    
+    return redirect(url_for('admin_dashboard'))
+
 @app.route('/api/chat', methods=['POST'])
+@login_required
 def chat():
     user_message = request.json.get('message', '')
     print(f"Received message: {user_message}")  # Debug log
@@ -285,12 +651,20 @@ def chat():
     return jsonify(response)
 
 @app.route('/api/flights', methods=['GET'])
-def get_flights():
+@login_required
+def get_flights_api():
     """API endpoint to retrieve all flights."""
     flights = get_all_flights()
     if not flights:
         return jsonify({"message": "No flights found in the database."}), 404
     return jsonify({"flights": flights}), 200
 
+# Initialize admin user when the app starts
+
+def initialize_app():
+    create_admin_user()
+
 if __name__ == '__main__':
+    with app.app_context():
+        create_admin_user()
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
