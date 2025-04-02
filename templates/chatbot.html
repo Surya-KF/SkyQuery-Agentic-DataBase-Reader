@@ -1,13 +1,350 @@
-<!-- templates/index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SkyQuery - Flight Information</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #4361ee;
+            --secondary-color: #3a0ca3;
+            --accent-color: #4cc9f0;
+            --light-blue: #f0f8ff;
+            --dark-blue: #1a1a2e;
+            --neon-blue: #00f5d4;
+            --glass-color: rgba(255, 255, 255, 0.15);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Poppins', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            color: white;
+            min-height: 100vh;
+        }
+        
+        .app-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        
+        header {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            border-bottom: 1px solid rgba(76, 201, 240, 0.3);
+        }
+        
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        
+        .logo i {
+            font-size: 2rem;
+            color: var(--accent-color);
+            text-shadow: 0 0 10px rgba(76, 201, 240, 0.7);
+        }
+        
+        .logo h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            background: linear-gradient(45deg, var(--accent-color), var(--primary-color));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            letter-spacing: 1px;
+        }
+        
+        .tagline {
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 15px;
+        }
+        
+        .user-nav {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        
+        .user-greeting {
+            color: var(--accent-color);
+            font-weight: 500;
+        }
+        
+        .nav-link {
+            color: white;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .nav-link:hover {
+            color: var(--accent-color);
+        }
+        
+        main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(4, 12, 48, 0.5);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+        }
+        
+        .messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .message {
+            display: flex;
+            gap: 15px;
+            max-width: 80%;
+        }
+        
+        .user-message {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+        
+        .bot-message {
+            align-self: flex-start;
+        }
+        
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(76, 201, 240, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        
+        .avatar i {
+            font-size: 1.2rem;
+        }
+        
+        .user-message .avatar {
+            background: rgba(67, 97, 238, 0.2);
+        }
+        
+        .content {
+            padding: 15px;
+            border-radius: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .user-message .content {
+            background: rgba(67, 97, 238, 0.2);
+            border-top-right-radius: 0;
+        }
+        
+        .bot-message .content {
+            border-top-left-radius: 0;
+        }
+        
+        .content p {
+            margin-bottom: 10px;
+            line-height: 1.5;
+        }
+        
+        .suggestions {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+            margin-top: 10px;
+        }
+        
+        .suggestion-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .suggestion-chip {
+            background: rgba(76, 201, 240, 0.2);
+            border: 1px solid var(--accent-color);
+            color: var(--accent-color);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .suggestion-chip:hover {
+            background: rgba(76, 201, 240, 0.4);
+            transform: translateY(-2px);
+        }
+        
+        .input-area {
+            display: flex;
+            padding: 15px;
+            background: rgba(4, 12, 48, 0.7);
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #user-input {
+            flex: 1;
+            padding: 12px 20px;
+            border-radius: 30px;
+            border: none;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 1rem;
+            outline: none;
+        }
+        
+        #user-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+        
+        #send-button {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(45deg, var(--primary-color), var(--accent-color));
+            color: white;
+            margin-left: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        #send-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(76, 201, 240, 0.4);
+        }
+        
+        .flight-card {
+            background: rgba(4, 12, 48, 0.7);
+            border-radius: 10px;
+            padding: 15px;
+            border-left: 4px solid var(--accent-color);
+        }
+        
+        .flight-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        
+        .flight-number {
+            font-weight: 600;
+            color: var(--accent-color);
+        }
+        
+        .flight-status {
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .status-on-time {
+            background: rgba(0, 255, 0, 0.2);
+            color: #00ff00;
+        }
+        
+        .status-delayed {
+            background: rgba(255, 165, 0, 0.2);
+            color: #ffa500;
+        }
+        
+        .status-boarding {
+            background: rgba(0, 191, 255, 0.2);
+            color: #00bfff;
+        }
+        
+        .status-cancelled {
+            background: rgba(255, 0, 0, 0.2);
+            color: #ff0000;
+        }
+        
+        .flight-details {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .flight-destination, .flight-time {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .flight-destination i, .flight-time i {
+            color: var(--accent-color);
+        }
+        
+        footer {
+            text-align: center;
+            padding: 20px 0;
+            margin-top: 30px;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        @media (max-width: 768px) {
+            .logo h1 {
+                font-size: 1.5rem;
+            }
+            
+            .logo i {
+                font-size: 1.5rem;
+            }
+            
+            .user-nav {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .message {
+                max-width: 90%;
+            }
+        }
+    </style>
 </head>
 <body>
     <div class="app-container">
@@ -58,6 +395,162 @@
         </footer>
     </div>
 
-    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const chatMessages = document.getElementById('chat-messages');
+            const userInput = document.getElementById('user-input');
+            const sendButton = document.getElementById('send-button');
+
+            function addMessage(message, isUser = false) {
+                const messageDiv = document.createElement('div');
+                messageDiv.classList.add('message');
+                
+                if (isUser) {
+                    messageDiv.classList.add('user-message');
+                    messageDiv.innerHTML = `
+                        <div class="avatar">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="content">
+                            <p>${message}</p>
+                        </div>
+                    `;
+                } else {
+                    messageDiv.classList.add('bot-message');
+                    messageDiv.innerHTML = `
+                        <div class="avatar">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="content">
+                            <p>${message}</p>
+                        </div>
+                    `;
+                }
+                
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            function sendMessage() {
+                const message = userInput.value.trim();
+                
+                if (message) {
+                    addMessage(message, true);
+                    userInput.value = '';
+                    
+                    const loadingDiv = document.createElement('div');
+                    loadingDiv.classList.add('message', 'bot-message', 'loading-message');
+                    loadingDiv.innerHTML = `
+                        <div class="avatar">
+                            <i class="fas fa-robot"></i>
+                        </div>
+                        <div class="content">
+                            <p>Thinking...</p>
+                        </div>
+                    `;
+                    chatMessages.appendChild(loadingDiv);
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                    
+                    fetch('/api/chat', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ message: message })
+                    })
+                    .then(response => {
+                        if (!response.ok) {
+                            if (response.status === 401) {
+                                window.location.href = '/login';
+                                throw new Error('Please login to continue');
+                            }
+                            throw new Error('Network response was not ok');
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        chatMessages.removeChild(loadingDiv);
+                        addMessage(data.answer);
+                        
+                        if (data.flight_data) {
+                            displayFlightCard(data.flight_data);
+                        }
+                        
+                        if (data.flights_list && data.flights_list.length > 0) {
+                            data.flights_list.forEach(flight => {
+                                displayFlightCard(flight);
+                            });
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        
+                        if (document.querySelector('.loading-message')) {
+                            chatMessages.removeChild(loadingDiv);
+                        }
+                        
+                        addMessage('Sorry, I encountered an error. Please try again later.');
+                    });
+                }
+            }
+
+            function displayFlightCard(flightData) {
+                const flightCard = document.createElement('div');
+                flightCard.classList.add('message', 'bot-message');
+                
+                let statusClass = 'status-on-time';
+                if (flightData.status) {
+                    const status = flightData.status.toLowerCase();
+                    if (status.includes('delay')) {
+                        statusClass = 'status-delayed';
+                    } else if (status.includes('board')) {
+                        statusClass = 'status-boarding';
+                    } else if (status.includes('cancel')) {
+                        statusClass = 'status-cancelled';
+                    }
+                }
+                
+                flightCard.innerHTML = `
+                    <div class="avatar">
+                        <i class="fas fa-plane"></i>
+                    </div>
+                    <div class="content">
+                        <div class="flight-card">
+                            <div class="flight-header">
+                                <span class="flight-number">${flightData.flight_number}</span>
+                                <span class="flight-status ${statusClass}">${flightData.status}</span>
+                            </div>
+                            <div class="flight-details">
+                                <div class="flight-destination">
+                                    <i class="fas fa-map-marker-alt"></i> ${flightData.origin || 'N/A'} → ${flightData.destination || 'N/A'}
+                                </div>
+                                <div class="flight-time">
+                                    <i class="far fa-clock"></i> ${flightData.departure_time || 'N/A'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                chatMessages.appendChild(flightCard);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+
+            sendButton.addEventListener('click', sendMessage);
+
+            userInput.addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            });
+
+            function sendSuggestion(suggestion) {
+                userInput.value = suggestion;
+                sendMessage();
+            }
+
+            window.sendSuggestion = sendSuggestion;
+        });
+    </script>
 </body>
 </html>
