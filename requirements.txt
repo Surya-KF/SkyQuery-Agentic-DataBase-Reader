@@ -5,4 +5,4 @@ bcrypt
 werkzeug
 pymongo
 gunicorn
- 
+python_dotenv 
