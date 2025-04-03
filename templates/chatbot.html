@@ -211,6 +211,23 @@
             background: rgba(76, 201, 240, 0.4);
             transform: translateY(-2px);
         }
+
+        .loading-spinner{
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(76, 201, 240, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--accent-color);
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+    
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
         
         .input-area {
             display: flex;
@@ -371,7 +388,7 @@
                             <i class="fas fa-robot"></i>
                         </div>
                         <div class="content">
-                            <p>Hello {{ session.user_name }}! I'm SkyBot, your flight information assistant. How can I help you today?</p>
+                            <p>Hello {{ session.user_name }}! I'm SkyQuery, your flight information assistant. How can I help you today?</p>
                             <p class="suggestions">Try asking about:</p>
                             <div class="suggestion-chips">
                                 <button class="suggestion-chip" onclick="sendSuggestion('When does Flight KG1234 depart?')">Flight KG1234 status</button>
@@ -445,7 +462,7 @@
                             <i class="fas fa-robot"></i>
                         </div>
                         <div class="content">
-                            <p>Thinking...</p>
+                            <p>Searching ....<span class="loading-spinner"></span></p>
                         </div>
                     `;
                     chatMessages.appendChild(loadingDiv);
