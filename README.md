@@ -2,6 +2,9 @@
 
 SkyQuery is an interactive flight information chatbot that provides real-time flight status updates, departure times, and flight details. The application uses a Flask backend with MongoDB for data storage and the Llama 3.3 70B model for natural language processing.
 
+## 🌐 Live Demo
+
+Try SkyQuery now: [https://skyquery-agentic-database-reader.onrender.com/](https://skyquery-agentic-database-reader.onrender.com/)
 
 ## 🚀 Features
 
@@ -10,6 +13,11 @@ SkyQuery is an interactive flight information chatbot that provides real-time fl
 - **Natural Language Interface**: Ask questions in everyday language rather than using specific commands
 - **Real-Time Data**: Connect to an up-to-date flight database for accurate information
 - **Responsive Design**: Works seamlessly on both desktop and mobile devices
+- **Admin Dashboard**: Secure administrative interface for managing flight data
+- **User Authentication**: Secure login system with role-based access control
+- **Flight Management**: Add, edit, and delete flight information through the admin interface
+- **API Endpoints**: RESTful API for programmatic access to flight data
+- **Conversational AI**: Enhanced chatbot responses with greeting detection and help functionality
 
 ## Screenshot of SkyQuery
 ![SkyQuery Screenshot](image/Screenshot%20from%202025-03-30%2022-40-10.png)
@@ -69,13 +77,15 @@ SkyQuery is an interactive flight information chatbot that provides real-time fl
 4. **Setup MongoDB**:
    - Create a MongoDB Atlas cluster
    - Create a database named "Flights"
-   - Create a collection named "flights"
+   - Create collections named "flights" and "users"
    - Add flight data to the collection with the following structure:
      ```json
      {
        "flight_number": "AI123",
+       "airline": "Air India",
        "departure_time": "10:30 AM",
        "departure_date": "2025-03-30",
+       "origin": "Delhi",
        "destination": "Dubai",
        "status": "On Time"
      }
@@ -90,25 +100,16 @@ python app.py
 ```
 The application will be available at `http://localhost:5000`
 
-### Deployment on Heroku
+### Deployment on Render
 
-This application is configured for Heroku deployment:
+The application is currently deployed on Render. To deploy your own instance:
 
-1. Create a new Heroku app:
-   ```bash
-   heroku create your-app-name
-   ```
-
-2. Add your environment variables to Heroku:
-   ```bash
-   heroku config:set TOGETHER_API_KEY=your_together_api_key
-   heroku config:set MONGO_PASSWORD=your_mongodb_password
-   ```
-
-3. Deploy to Heroku:
-   ```bash
-   git push heroku main
-   ```
+1. Create a new Web Service on Render
+2. Connect your GitHub repository
+3. Configure the build command: `pip install -r requirements.txt`
+4. Configure the start command: `gunicorn app:app`
+5. Add your environment variables in the Render dashboard
+6. Deploy the application
 
 ## 🧠 How It Works
 
@@ -120,6 +121,8 @@ SkyQuery uses a multi-agent architecture:
 2. **Natural Language Processing**: Together AI's Llama 3.3 70B model extracts flight numbers and destinations
 3. **Information Retrieval**: MongoDB database queries for flight information
 4. **Response Generation**: Structured response formatting for consistent user experience
+5. **Admin System**: Secure backend for flight data management
+6. **Authentication**: User login and session management
 
 ### Query Processing Flow
 
@@ -128,13 +131,20 @@ SkyQuery uses a multi-agent architecture:
 3. It queries the MongoDB database for relevant flight information
 4. Results are formatted and presented to the user with appropriate visualization
 
+### Admin Workflow
+
+1. Admin logs in with secure credentials
+2. Admin dashboard displays all flights in the system
+3. Admin can add new flights, edit existing flight details, or delete flights
+4. Changes are immediately reflected in the database and available to users
+
 ## 📦 Project Structure
 
 ```
 skyquery/
 ├── .env                  # Environment variables (not in version control)
 ├── .gitignore            # Git ignore file
-├── Procfile              # Heroku deployment configuration
+├── Procfile              # Deployment configuration
 ├── README.md             # Project documentation
 ├── app.py                # Main Flask application
 ├── requirements.txt      # Python dependencies
@@ -144,7 +154,11 @@ skyquery/
 │   └── js/
 │       └── script.js     # Frontend JavaScript
 └── templates/
-    └── index.html        # Main HTML template
+    ├── index.html        # Main HTML template
+    ├── login.html        # User login page
+    ├── admin_dashboard.html # Admin interface
+    ├── add_flight.html   # Form for adding flights
+    └── edit_flight.html  # Form for editing flights
 ```
 
 ## 🔍 API Endpoints
@@ -154,6 +168,15 @@ The application provides the following API endpoints:
 - `GET /`: Main application interface
 - `POST /api/chat`: Process user queries and return flight information
 - `GET /api/flights`: Retrieve all flights from the database
+- `GET /login`: User login page
+- `POST /login`: Process login requests
+- `GET /logout`: Log out the current user
+- `GET /admin`: Admin dashboard (requires admin role)
+- `GET /admin/add_flight`: Form to add new flights
+- `POST /admin/add_flight`: Process new flight submissions
+- `GET /admin/edit_flight/<flight_number>`: Form to edit a specific flight
+- `POST /admin/edit_flight/<flight_number>`: Process flight edit submissions
+- `GET /admin/delete_flight/<flight_number>`: Delete a specific flight
 
 ## 🎯 Example Queries
 
@@ -164,19 +187,40 @@ Users can ask questions like:
 - "Tell me about Flight LH789"
 - "Show me flights to London"
 - "Are there any flights to Dubai today?"
+- "Help" - For instructions on how to use the chatbot
+- "Hello" - For a friendly greeting response
+
+## 👤 User Roles
+
+### Regular Users
+- Can query flight information through the chatbot interface
+- Can view flight details based on flight number or destination
+
+### Admin Users
+- Default admin credentials are created on first run:
+  - Username: Admin
+  - Password: Password@12345678910
+- Can access the admin dashboard
+- Can add, edit, and delete flight information
+- Can view all flights in the system
 
 ## 🛠️ Customization
 
 ### Adding More Flight Data
 
-To add more flight data, insert additional documents into your MongoDB "flights" collection:
+To add more flight data, you can:
+
+1. Use the admin interface to add flights through the web UI
+2. Insert additional documents into your MongoDB "flights" collection:
 
 ```javascript
 db.flights.insertMany([
   {
     "flight_number": "LH789",
+    "airline": "Lufthansa",
     "departure_time": "02:15 PM",
     "departure_date": "2025-03-30",
+    "origin": "Mumbai",
     "destination": "Frankfurt",
     "status": "Boarding"
   },
@@ -191,6 +235,7 @@ The UI is built with HTML, CSS, and JavaScript. You can customize:
 - Colors and styling in `static/css/style.css`
 - UI elements in `templates/index.html`
 - Interaction behavior in `static/js/script.js`
+- Admin interface in the admin template files
 
 ## 🔑 Getting API Keys
 
@@ -204,7 +249,55 @@ The UI is built with HTML, CSS, and JavaScript. You can customize:
 - **MongoDB Connection Problems**: Ensure your MongoDB Atlas whitelist includes your IP address
 - **API Rate Limiting**: Be aware of Together AI's rate limits for the free tier
 - **Environment Variables**: Double check that your `.env` file is in the correct location and properly formatted
+- **Admin Access Issues**: If you can't access the admin dashboard, ensure your user has the 'admin' role in the database
+- **Flight Data Not Appearing**: Check that your flight documents have the correct structure in MongoDB
 
+
+## 🌍 Real-World Use Cases
+
+SkyQuery can be deployed in various real-world scenarios to improve flight information access:
+
+### 1. Airport Information Kiosks
+- Deploy on touchscreen kiosks throughout airports
+- Allow travelers to quickly check flight statuses without waiting in line
+- Reduce congestion at information desks during peak travel times
+
+### 2. Customer Service Augmentation
+- Handle routine flight status inquiries, freeing human agents for complex issues
+- Reduce call center wait times during high-volume periods
+- Provide 24/7 flight information access when human agents are unavailable
+
+### 3. Travel Agency Support Tool
+- Enable travel agents to quickly check flight information for clients
+- Improve service efficiency and reduce time spent on routine information lookups
+- Integrate with booking systems for seamless information flow
+
+### 4. Corporate Travel Management
+- Allow employees to check flight statuses without contacting the travel department
+- Send automated notifications about flight changes to relevant team members
+- Streamline travel expense reporting with accurate flight data
+
+### 5. Mobile Travel Companion
+- Send push notifications about gate changes, delays, or cancellations
+- Provide voice-activated flight information for hands-free use
+- Integrate with calendar apps to automatically track upcoming flights
+
+### 6. Airport Operations Management
+- Monitor all flights at a facility in real-time
+- Allocate resources based on flight statuses and passenger loads
+- Coordinate gate assignments and ground services
+
+### 7. Accessibility Solution
+- Make flight information more accessible to visually impaired travelers through voice interaction
+- Help elderly travelers who may struggle with complex web interfaces
+- Assist international travelers with language barriers (with multilingual support)
+
+### 8. Emergency Response Tool
+- Scale to handle surge in status inquiries during travel disruptions
+- Provide consistent, accurate information to all passengers
+- Free human agents to handle complex rebooking and accommodation needs
+
+---
 ## 📝 License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
@@ -216,7 +309,5 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## 📞 Support
 
 If you have any questions or need assistance with the application, please open an issue in the repository.
-
----
 
 Created with ❤️ by [Surya-KF](https://github.com/Surya-KF)
