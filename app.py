@@ -359,30 +359,61 @@ def qa_agent_respond(user_query: str) -> dict:
     }
 
 def generate_chatbot_response(user_query: str) -> dict:
-    """Generate a more conversational response based on the user query"""
+
+    """Generate a more conversational response based on the user query using LLM"""
     
-    # Check if it's a greeting or farewell
+
+
+
+
+
+    query_lower = user_query.lower()
+    
+
+
+
+
+
+
+
+
+
+    # First, check if it's a simple greeting or farewell to avoid unnecessary LLM calls
     greetings = ["hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening"]
     farewells = ["bye", "goodbye", "see you", "farewell", "exit", "quit"]
     help_queries = ["help", "what can you do", "how does this work", "instructions"]
     
-    query_lower = user_query.lower()
-    
-    # Handle greetings
-    if any(greeting in query_lower for greeting in greetings) and not any(kw in query_lower for kw in ["flights", "delhi", "dubai", "frankfurt"]):
+    # Handle simple patterns without LLM
+    if any(greeting in query_lower for greeting in greetings) and len(query_lower.split()) < 4:
         return {
+
             "answer": "Hello! I'm SkyBot, your flight information assistant. How can I help you today? You can ask me about flight status, departure times, or destinations."
         }
-    
-    # Handle farewells
-    elif any(farewell in query_lower for farewell in farewells):
+
+
+
+
+
+
+
+
+
+
+    elif any(farewell in query_lower for farewell in farewells) and len(query_lower.split()) < 4:
         return {
+
             "answer": "Thank you for using SkyBot! Have a safe journey and a wonderful day. Goodbye!"
         }
-    
-    # Handle help requests
-    elif any(help_query in query_lower for help_query in help_queries):
+
+
+
+    elif any(help_query in query_lower for help_query in help_queries) and len(query_lower.split()) < 5:
         return {
+
+
+
+
+
             "answer": "I can help you find information about flights. Try asking questions like:<br>"
                      "- When does Flight AI123 depart?<br>"
                      "- What is the status of Flight EK500?<br>"
@@ -391,11 +422,113 @@ def generate_chatbot_response(user_query: str) -> dict:
                      "Just make sure to include either a flight number or destination in your question!"
         }
     
-    # Check if it's likely a flight query (either by number or destination)
-    else:
-        # Log the query
-        print(f"Processing flight query: {query_lower}")
-        return qa_agent_respond(user_query)
+
+
+
+    # For all other queries, first get the flight data
+    flight_data_response = qa_agent_respond(user_query)
+    
+    # If we have flight data or a list of flights, use LLM to generate a contextual response
+    if "flight_data" in flight_data_response or "flights_list" in flight_data_response:
+        try:
+            # Prepare the context for the LLM
+            if "flight_data" in flight_data_response:
+                flight_info = flight_data_response["flight_data"]
+                context = f"Flight {flight_info['flight_number']} information: Departs at {flight_info['departure_time']} from {flight_info['origin']} to {flight_info['destination']}. Current status: {flight_info['status']}. Departure date: {flight_info.get('departure_date', 'Not specified')}. Airline: {flight_info.get('airline', 'Not specified')}."
+            else:
+                flights = flight_data_response["flights_list"]
+                destination = flights[0]["destination"] if flights else "the requested destination"
+                context = f"Found {len(flights)} flights to {destination}. "
+                for i, flight in enumerate(flights[:5]):  # Limit to first 5 flights to avoid token limits
+                    context += f"Flight {flight['flight_number']} departs at {flight['departure_time']} from {flight['origin']}. Status: {flight['status']}. "
+                if len(flights) > 5:
+                    context += f"And {len(flights) - 5} more flights. "
+            
+            # Call the LLM to generate a conversational response
+            response = client.chat.completions.create(
+                model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                messages=[
+                    {"role": "system", 
+
+
+                     "content": "You are SkyBot, a helpful and friendly flight information assistant. Respond conversationally to the user's query using the flight information provided. Make your response informative, natural, and engaging. Include all relevant flight details but in a conversational way. If appropriate, offer additional help or suggestions."},
+                    {"role": "user", "content": f"User query: {user_query}\nFlight information: {context}"}
+                ],
+            )
+
+
+            
+            # Get the LLM's response
+            llm_response = response.choices[0].message.content.strip()
+            
+            # Keep the original structured data for the frontend
+            result = flight_data_response.copy()
+            # Replace the answer with the LLM-generated response
+            result["answer"] = llm_response
+            return result
+            
+        except Exception as e:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            print(f"LLM response generation error: {e}")
+            # Fall back to the original response if LLM fails
+            return flight_data_response
+    
+    # For queries where we couldn't find flight data, also use LLM to generate a helpful response
+    elif "answer" in flight_data_response and ("not found" in flight_data_response["answer"].lower() or 
+                                              "no valid flight" in flight_data_response["answer"].lower()):
+        try:
+            response = client.chat.completions.create(
+                model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+                messages=[
+                    {"role": "system", 
+                     "content": "You are SkyBot, a helpful and friendly flight information assistant. The user asked about flight information, but no matching flights were found. Respond in a helpful, empathetic way, suggesting alternatives or clarifying what information you need."},
+                    {"role": "user", "content": f"User query: {user_query}\nNo flight information found."}
+                ],
+            )
+            
+
+
+
+
+
+
+            llm_response = response.choices[0].message.content.strip()
+            return {"answer": llm_response}
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        except Exception as e:
+            print(f"LLM error response generation error: {e}")
+            # Fall back to the original response if LLM fails
+            return flight_data_response
+    
+    # Return the original response for any other cases
+    return flight_data_response
 
 def add_flight(flight_data):
     """Add a new flight to the database"""
