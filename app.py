@@ -659,7 +659,12 @@ def get_flights_api():
         return jsonify({"message": "No flights found in the database."}), 404
     return jsonify({"flights": flights}), 200
 
+@app.route('/about')
+def about():
+    """Render the about page"""
+    return render_template('about.html')
 # Initialize admin user when the app starts
+
 
 def initialize_app():
     create_admin_user()
