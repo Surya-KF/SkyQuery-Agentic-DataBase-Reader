@@ -19,8 +19,6 @@ MONGO_PASSWORD = urllib.parse.quote_plus(os.getenv("MONGO_PASSWORD"))
 MONGO_URI = f"mongodb+srv://suryakf1974:{MONGO_PASSWORD}@cluster0.pgvt85f.mongodb.net/Flights?retryWrites=true&w=majority&appName=Cluster0"
 
 # Initialize Flask app
-
-
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY", "your-secret-key-for-sessions")
 
@@ -181,8 +179,6 @@ def get_flights_by_destination(destination: str) -> list:
             {"destination": {"$regex": f"^{destination}$", "$options": "i"}}
         ))
 
-    
-
         # If exact match returns no results, try partial match
         if not flights:
             flights = list(flights_collection.find(
@@ -196,6 +192,36 @@ def get_flights_by_destination(destination: str) -> list:
         
         # Debug output to console
         print(f"Found {len(flights)} flights to {destination}: {flights}")
+        
+        return flights
+    except Exception as e:
+        print(f"MongoDB query failed: {e}")
+        return []
+    finally:
+        if 'mongo_client' in locals():
+            mongo_client.close()
+
+def get_flights_by_route(origin: str, destination: str) -> list:
+    """Retrieves all flights going from a specific origin to a specific destination."""
+    try:
+        mongo_client = MongoClient(MONGO_URI)
+        db = mongo_client["Flights"]
+        flights_collection = db["flights"]
+
+        # Query MongoDB for flights with the given origin and destination
+        # Using case-insensitive search
+        flights = list(flights_collection.find({
+            "origin": {"$regex": origin, "$options": "i"},
+            "destination": {"$regex": destination, "$options": "i"}
+        }))
+
+        # Remove MongoDB's internal '_id' field from each document
+        for flight in flights:
+            if '_id' in flight:
+                flight.pop('_id', None)
+        
+        # Debug output to console
+        print(f"Found {len(flights)} flights from {origin} to {destination}: {flights}")
         
         return flights
     except Exception as e:
@@ -280,8 +306,77 @@ def extract_destination(text: str) -> str:
         print(f"Together AI API error: {e}")
         return None
 
+def extract_origin_destination(text: str) -> tuple:
+    """Attempts to extract origin and destination from the query using AI."""
+    try:
+        response = client.chat.completions.create(
+            model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            messages=[
+                {"role": "system",
+                "content": "Extract the origin and destination cities or airports from the query. Return them as 'Origin: [city/airport name]' and 'Destination: [city/airport name]'. If either is not found, return 'NONE' for that value."},
+                {"role": "user", "content": text},
+            ],
+        )
+        ai_response = response.choices[0].message.content.strip()
+        
+        # Parse the AI response to get origin and destination
+        origin = None
+        destination = None
+        
+        for line in ai_response.split("\n"):
+            if line.lower().startswith("origin:"):
+                origin = line.split(":", 1)[1].strip()
+                if origin == "NONE":
+                    origin = None
+            elif line.lower().startswith("destination:"):
+                destination = line.split(":", 1)[1].strip()
+                if destination == "NONE":
+                    destination = None
+        
+        return origin, destination
+    except Exception as e:
+        print(f"Together AI API error: {e}")
+        return None, None
+
 def qa_agent_respond(user_query: str) -> dict:
     """Processes user query, extracts flight number, and returns structured flight info."""
+    
+    # Check if query is about flights from an origin to a destination
+    route_keywords = ["flight from", "flights from", "flying from", "travel from", "go from"]
+    is_route_query = any(keyword in user_query.lower() for keyword in route_keywords)
+    
+    if is_route_query:
+        # Extract origin and destination
+        origin, destination = extract_origin_destination(user_query)
+        if origin and destination:
+            print(f"Extracted route: {origin} to {destination}")  # Debug log
+            
+            # Get flights for that route
+            flights = get_flights_by_route(origin, destination)
+            print(f"Found {len(flights)} flights from {origin} to {destination}")  # Debug log
+            
+            if not flights:
+                return {
+                    "answer": f"Sorry, I couldn't find any flights from {origin} to {destination} in our database."
+                }
+                
+            flights_info = "\n".join([
+                f"Flight {flight['flight_number']} from {flight['origin']} to {flight['destination']} departs at {flight['departure_time']} on {flight['departure_date']}. Status: {flight['status']}"
+                for flight in flights
+            ])
+            formatted_flights_info = flights_info.replace('\n', '<br>')
+            
+            # Handle singular vs plural correctly
+            if len(flights) == 1:
+                return {
+                    "answer": f"I found 1 flight from {origin} to {destination}:<br><br>{formatted_flights_info}",
+                    "flights_list": flights
+                }
+            else:
+                return {
+                    "answer": f"I found {len(flights)} flights from {origin} to {destination}:<br><br>{formatted_flights_info}",
+                    "flights_list": flights
+                }
     
     # Check if query is about flights to a destination
     destination_keywords = ["flights to", "flying to", "travel to", "planes to", "airlines to", "to"]
@@ -359,72 +454,33 @@ def qa_agent_respond(user_query: str) -> dict:
     }
 
 def generate_chatbot_response(user_query: str) -> dict:
-
     """Generate a more conversational response based on the user query using LLM"""
-    
-
-
-
-
-
     query_lower = user_query.lower()
     
-
-
-
-
-
-
-
-
-
     # First, check if it's a simple greeting or farewell to avoid unnecessary LLM calls
     greetings = ["hello", "hi", "hey", "greetings", "good morning", "good afternoon", "good evening"]
-    farewells = ["bye", "goodbye", "see you", "farewell", "exit", "quit"]
+    farewells = ["thanks", "bye", "goodbye", "see you", "farewell", "exit", "quit"]
     help_queries = ["help", "what can you do", "how does this work", "instructions"]
     
     # Handle simple patterns without LLM
     if any(greeting in query_lower for greeting in greetings) and len(query_lower.split()) < 4:
         return {
-
-            "answer": "Hello! I'm SkyBot, your flight information assistant. How can I help you today? You can ask me about flight status, departure times, or destinations."
+            "answer": "Hello! I'm SkyQuery, your flight information assistant. How can I help you today? You can ask me about flight status, departure times, or destinations."
         }
-
-
-
-
-
-
-
-
-
-
     elif any(farewell in query_lower for farewell in farewells) and len(query_lower.split()) < 4:
         return {
-
-            "answer": "Thank you for using SkyBot! Have a safe journey and a wonderful day. Goodbye!"
+            "answer": "Thank you for using SkyQuery! Have a safe journey and a wonderful day. Goodbye!"
         }
-
-
-
     elif any(help_query in query_lower for help_query in help_queries) and len(query_lower.split()) < 5:
         return {
-
-
-
-
-
             "answer": "I can help you find information about flights. Try asking questions like:<br>"
                      "- When does Flight AI123 depart?<br>"
                      "- What is the status of Flight EK500?<br>"
                      "- Tell me about Flight LH789<br>"
                      "- Show me flights to London<br>"
-                     "Just make sure to include either a flight number or destination in your question!"
+                     "- Are there any flights from New York to Paris?<br>"
+                     "Just make sure to include either a flight number, destination, or both origin and destination in your question!"
         }
-    
-
-
-
     # For all other queries, first get the flight data
     flight_data_response = qa_agent_respond(user_query)
     
@@ -437,10 +493,23 @@ def generate_chatbot_response(user_query: str) -> dict:
                 context = f"Flight {flight_info['flight_number']} information: Departs at {flight_info['departure_time']} from {flight_info['origin']} to {flight_info['destination']}. Current status: {flight_info['status']}. Departure date: {flight_info.get('departure_date', 'Not specified')}. Airline: {flight_info.get('airline', 'Not specified')}."
             else:
                 flights = flight_data_response["flights_list"]
-                destination = flights[0]["destination"] if flights else "the requested destination"
-                context = f"Found {len(flights)} flights to {destination}. "
+                if not flights:
+                    return flight_data_response
+                    
+                # Check if this is an origin-destination query
+                if "from" in user_query.lower() and len(flights) > 0:
+                    origin = flights[0]["origin"]
+                    destination = flights[0]["destination"]
+                    context = f"Found {len(flights)} flights from {origin} to {destination}. "
+                else:
+                    destination = flights[0]["destination"] if flights else "the requested destination"
+                    context = f"Found {len(flights)} flights to {destination}. "
+                    
                 for i, flight in enumerate(flights[:5]):  # Limit to first 5 flights to avoid token limits
-                    context += f"Flight {flight['flight_number']} departs at {flight['departure_time']} from {flight['origin']}. Status: {flight['status']}. "
+                    if "from" in user_query.lower():
+                        context += f"Flight {flight['flight_number']} departs at {flight['departure_time']} on {flight.get('departure_date', 'N/A')} from {flight['origin']} to {flight['destination']}. Status: {flight['status']}. "
+                    else:
+                        context += f"Flight {flight['flight_number']} departs at {flight['departure_time']} from {flight['origin']}. Status: {flight['status']}. "
                 if len(flights) > 5:
                     context += f"And {len(flights) - 5} more flights. "
             
@@ -449,15 +518,10 @@ def generate_chatbot_response(user_query: str) -> dict:
                 model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
                 messages=[
                     {"role": "system", 
-
-
-                     "content": "You are SkyBot, a helpful and friendly flight information assistant. Respond conversationally to the user's query using the flight information provided. Make your response informative, natural, and engaging. Include all relevant flight details but in a conversational way. If appropriate, offer additional help or suggestions."},
+                     "content": "You are SkyQuery, a helpful and friendly flight information assistant. Respond conversationally to the user's query using the flight information provided. Make your response informative, natural, and engaging. Include all relevant flight details but in a conversational way. If appropriate, offer additional help or suggestions."},
                     {"role": "user", "content": f"User query: {user_query}\nFlight information: {context}"}
                 ],
             )
-
-
-            
             # Get the LLM's response
             llm_response = response.choices[0].message.content.strip()
             
@@ -466,22 +530,8 @@ def generate_chatbot_response(user_query: str) -> dict:
             # Replace the answer with the LLM-generated response
             result["answer"] = llm_response
             return result
-            
+     
         except Exception as e:
-
-
-
-
-
-
-
-
-
-
-
-
-
-
             print(f"LLM response generation error: {e}")
             # Fall back to the original response if LLM fails
             return flight_data_response
@@ -494,34 +544,12 @@ def generate_chatbot_response(user_query: str) -> dict:
                 model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
                 messages=[
                     {"role": "system", 
-                     "content": "You are SkyBot, a helpful and friendly flight information assistant. The user asked about flight information, but no matching flights were found. Respond in a helpful, empathetic way, suggesting alternatives or clarifying what information you need."},
+                     "content": "You are SkyQuery, a helpful and friendly flight information assistant. The user asked about flight information, but no matching flights were found. Respond in a helpful, empathetic way, suggesting alternatives or clarifying what information you need."},
                     {"role": "user", "content": f"User query: {user_query}\nNo flight information found."}
                 ],
-            )
-            
-
-
-
-
-
-
+            )        
             llm_response = response.choices[0].message.content.strip()
-            return {"answer": llm_response}
-            
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+            return {"answer": llm_response}         
         except Exception as e:
             print(f"LLM error response generation error: {e}")
             # Fall back to the original response if LLM fails
@@ -611,7 +639,6 @@ def index():
 def chatbot():
     return render_template('chatbot.html')
     
-
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     if request.method == 'POST':
@@ -722,6 +749,7 @@ def admin_add_flight():
             return render_template('add_flight.html')
     
     return render_template('add_flight.html')
+
 
 @app.route('/admin/flights/edit/<flight_number>', methods=['GET', 'POST'])
 @login_required

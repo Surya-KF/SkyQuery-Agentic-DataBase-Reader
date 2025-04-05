@@ -19,6 +19,9 @@ Try SkyQuery now: [https://skyquery-agentic-database-reader.onrender.com/](https
 - **API Endpoints**: RESTful API for programmatic access to flight data
 - **Conversational AI**: Enhanced chatbot responses with greeting detection and help functionality
 
+## Architecture
+![Architecture](image/diagram.png)
+
 ## Screenshot of SkyQuery
 ![SkyQuery Screenshot](image/Screenshot%20from%202025-03-30%2022-40-10.png)
 
