@@ -333,6 +333,18 @@
         .flight-destination i, .flight-time i {
             color: var(--accent-color);
         }
+        .flight-airline {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+            margin-bottom: 5px;
+        }
+
+        .flight-airline i {
+            color: var(--accent-color);
+        }       
+
         
         footer {
             text-align: center;
@@ -538,6 +550,9 @@
                                 <span class="flight-status ${statusClass}">${flightData.status}</span>
                             </div>
                             <div class="flight-details">
+                                <div class="flight-airline">
+                                    <i class="fas fa-plane-departure"></i> ${flightData.airline || 'N/A'}
+                                </div>
                                 <div class="flight-destination">
                                     <i class="fas fa-map-marker-alt"></i> ${flightData.origin || 'N/A'} → ${flightData.destination || 'N/A'}
                                 </div>
