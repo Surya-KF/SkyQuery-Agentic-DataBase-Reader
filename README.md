@@ -10,22 +10,36 @@ Try SkyQuery now: [https://skyquery-agentic-database-reader.onrender.com/](https
 
 - **Flight Status Lookup**: Quickly check the status of any flight by providing the flight number
 - **Destination-Based Search**: Find all flights going to a specific destination
+- **Route-Based Search**: Find all flights from a specific origin to a destination
 - **Natural Language Interface**: Ask questions in everyday language rather than using specific commands
 - **Real-Time Data**: Connect to an up-to-date flight database for accurate information
 - **Responsive Design**: Works seamlessly on both desktop and mobile devices
 - **Admin Dashboard**: Secure administrative interface for managing flight data
 - **User Authentication**: Secure login system with role-based access control
+- **User Registration**: New users can create accounts with personalized preferences
+- **User Preferences**: Save favorite destinations and preferred airlines
 - **Flight Management**: Add, edit, and delete flight information through the admin interface
 - **API Endpoints**: RESTful API for programmatic access to flight data
 - **Conversational AI**: Enhanced chatbot responses with greeting detection and help functionality
+- **Conversation Memory**: The chatbot remembers context from previous exchanges
+- **Entity Tracking**: System tracks flight numbers, origins, and destinations for follow-up questions
+- **Secure Password Storage**: User passwords are securely hashed using bcrypt
+- **Today's Flights View**: Quick access to all flights departing today
+- **Conversation Reset**: Users can clear their conversation history
 
 ## Architecture
 ![Architecture](image/diagram.png)
 
 ## Screenshot of SkyQuery
-![SkyQuery Screenshot](image/Screenshot%20from%202025-03-30%2022-40-10.png)
+ ### Homepage
+![SkyQuery Screenshot](image/homepage.gif)
 
-![SkyQuery Screenshot](image/ss2.png)
+ ### Admin Dashboard
+ ![SkyQuery Screenshot](image/dashboard.gif)
+
+
+## Chatbot
+![SkyQuery Screenshot](image/chatbot.gif)
 
 
 ## 📋 Prerequisites
@@ -75,6 +89,7 @@ Try SkyQuery now: [https://skyquery-agentic-database-reader.onrender.com/](https
    ```
    TOGETHER_API_KEY=your_together_api_key
    MONGO_PASSWORD=your_mongodb_password
+   SECRET_KEY=your_secret_key_for_sessions
    ```
 
 4. **Setup MongoDB**:
@@ -126,6 +141,7 @@ SkyQuery uses a multi-agent architecture:
 4. **Response Generation**: Structured response formatting for consistent user experience
 5. **Admin System**: Secure backend for flight data management
 6. **Authentication**: User login and session management
+7. **Conversation Memory**: Tracking context for follow-up questions
 
 ### Query Processing Flow
 
@@ -133,6 +149,7 @@ SkyQuery uses a multi-agent architecture:
 2. The app extracts the flight number or destination using NLP
 3. It queries the MongoDB database for relevant flight information
 4. Results are formatted and presented to the user with appropriate visualization
+5. The system remembers entities (flight numbers, destinations) for context in follow-up questions
 
 ### Admin Workflow
 
@@ -159,9 +176,13 @@ skyquery/
 └── templates/
     ├── index.html        # Main HTML template
     ├── login.html        # User login page
-    ├── admin_dashboard.html # Admin interface
+    ├── register.html     # User registration page
+    ├── chatbot.html      # Chatbot interface
+    ├── dashboard.html    # User dashboard
+    ├── admin.html        # Admin dashboard
     ├── add_flight.html   # Form for adding flights
-    └── edit_flight.html  # Form for editing flights
+    ├── edit_flight.html  # Form for editing flights
+    └── about.html        # About page
 ```
 
 ## 🔍 API Endpoints
@@ -169,17 +190,25 @@ skyquery/
 The application provides the following API endpoints:
 
 - `GET /`: Main application interface
-- `POST /api/chat`: Process user queries and return flight information
-- `GET /api/flights`: Retrieve all flights from the database
+- `GET /chatbot`: Chatbot interface (requires login)
+- `GET /register`: User registration page
+- `POST /register`: Process registration requests
 - `GET /login`: User login page
 - `POST /login`: Process login requests
 - `GET /logout`: Log out the current user
+- `GET /dashboard`: User dashboard showing today's flights
 - `GET /admin`: Admin dashboard (requires admin role)
-- `GET /admin/add_flight`: Form to add new flights
-- `POST /admin/add_flight`: Process new flight submissions
-- `GET /admin/edit_flight/<flight_number>`: Form to edit a specific flight
-- `POST /admin/edit_flight/<flight_number>`: Process flight edit submissions
-- `GET /admin/delete_flight/<flight_number>`: Delete a specific flight
+- `GET /admin/flights/add`: Form to add new flights
+- `POST /admin/flights/add`: Process new flight submissions
+- `GET /admin/flights/edit/<flight_number>`: Form to edit a specific flight
+- `POST /admin/flights/edit/<flight_number>`: Process flight edit submissions
+- `POST /admin/flights/delete/<flight_number>`: Delete a specific flight
+- `POST /api/chat`: Process user queries and return flight information
+- `GET /api/flights`: Retrieve all flights from the database
+- `GET /api/preferences`: Get user preferences
+- `POST /api/preferences`: Update user preferences
+- `POST /api/conversation/clear`: Clear conversation history
+- `GET /about`: About page with information about the application
 
 ## 🎯 Example Queries
 
@@ -189,20 +218,26 @@ Users can ask questions like:
 - "What is the status of Flight EK500?"
 - "Tell me about Flight LH789"
 - "Show me flights to London"
-- "Are there any flights to Dubai today?"
+- "Are there any flights from New York to Paris?"
+- "What flights are going to Dubai today?"
+- Follow-up questions like "When does it arrive?" or "What's the status?"
 - "Help" - For instructions on how to use the chatbot
 - "Hello" - For a friendly greeting response
 
 ## 👤 User Roles
 
 ### Regular Users
+- Can register for a new account
 - Can query flight information through the chatbot interface
 - Can view flight details based on flight number or destination
+- Can view all flights departing today on the dashboard
+- Can set and update preferences (favorite destinations, preferred airlines)
+- Can clear conversation history
 
 ### Admin Users
 - Default admin credentials are created on first run:
   - Username: Admin
-  - Password: Password@12345678910
+  - Password: **************
 - Can access the admin dashboard
 - Can add, edit, and delete flight information
 - Can view all flights in the system
@@ -231,6 +266,15 @@ db.flights.insertMany([
 ]);
 ```
 
+### User Preferences
+
+Users can customize their experience with preferences:
+- Favorite destinations for quick access
+- Preferred airlines for filtering results
+- Display format preferences (detailed or concise)
+
+These preferences are stored in the user's profile and can be updated through the API.
+
 ### Changing the UI
 
 The UI is built with HTML, CSS, and JavaScript. You can customize:
@@ -254,7 +298,9 @@ The UI is built with HTML, CSS, and JavaScript. You can customize:
 - **Environment Variables**: Double check that your `.env` file is in the correct location and properly formatted
 - **Admin Access Issues**: If you can't access the admin dashboard, ensure your user has the 'admin' role in the database
 - **Flight Data Not Appearing**: Check that your flight documents have the correct structure in MongoDB
-
+- **Session Errors**: Make sure you've set a secure SECRET_KEY in your .env file
+- **Registration Issues**: Ensure usernames and emails are unique in the database
+- **Follow-up Questions Not Working**: Check that conversation history is being properly maintained
 
 ## 🌍 Real-World Use Cases
 
@@ -299,6 +345,14 @@ SkyQuery can be deployed in various real-world scenarios to improve flight infor
 - Scale to handle surge in status inquiries during travel disruptions
 - Provide consistent, accurate information to all passengers
 - Free human agents to handle complex rebooking and accommodation needs
+
+## 🔒 Security Features
+
+- **Password Hashing**: All user passwords are securely hashed using bcrypt
+- **Session Management**: Secure session handling with Flask
+- **Role-Based Access Control**: Different permissions for regular users and admins
+- **Protected Routes**: Authentication required for sensitive operations
+- **Input Validation**: Validation of user inputs to prevent injection attacks
 
 ---
 ## 📝 License

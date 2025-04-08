@@ -45,13 +45,18 @@ def register_user(username, email, password):
         # Hash the password
         hashed_password = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
         
-        # Create user document
+        # Create user document with preferences
         user = {
             "username": username,
             "email": email,
             "password": hashed_password,
             "role": "user",
-            "created_at": datetime.now()
+            "created_at": datetime.now(),
+            "preferences": {
+                "favorite_destinations": [],
+                "preferred_airlines": [],
+                "display_format": "detailed"  # or "concise"
+            }
         }
         
         # Insert user into database
@@ -82,7 +87,8 @@ def authenticate_user(username, password):
             user_data = {
                 "username": user["username"],
                 "email": user.get("email", ""),
-                "role": user.get("role", "user")
+                "role": user.get("role", "user"),
+                "preferences": user.get("preferences", {})
             }
             return True, user_data
         else:
@@ -113,7 +119,12 @@ def create_admin_user():
                 "email": "admin@skybot.com",
                 "password": hashed_password,
                 "role": "admin",
-                "created_at": datetime.now()
+                "created_at": datetime.now(),
+                "preferences": {
+                    "favorite_destinations": [],
+                    "preferred_airlines": [],
+                    "display_format": "detailed"
+                }
             }
             
             # Insert admin into database
@@ -338,8 +349,67 @@ def extract_origin_destination(text: str) -> tuple:
         print(f"Together AI API error: {e}")
         return None, None
 
-def qa_agent_respond(user_query: str) -> dict:
+def is_followup_query(query, conversation_history):
+    """Detect if a query is a follow-up to previous conversation"""
+    if not conversation_history or len(conversation_history) < 2:
+        return False
+        
+    query_lower = query.lower()
+    
+    # Check for follow-up indicators
+    followup_indicators = [
+        "what about", "how about", "and", "also", "what time", 
+        "when does it", "is it", "will it", "does it", "what's the", 
+        "tell me more", "can you", "show me", "what is"
+    ]
+    
+    for indicator in followup_indicators:
+        if query_lower.startswith(indicator):
+            return True
+            
+    # Check for standalone pronouns
+    pronouns = ["it", "this", "that", "they", "them", "those"]
+    words = query_lower.split()
+    
+    if len(words) < 3 and any(word in pronouns for word in words):
+        return True
+        
+    # Very short queries might be follow-ups
+    if len(words) <= 2 and not any(greeting in query_lower for greeting in ["hi", "hello", "hey"]):
+        return True
+        
+    return False
+
+def resolve_entity_references(query, entity_memory):
+    """Resolve entity references in follow-up queries"""
+    if not entity_memory or not any(entity_memory.values()):
+        return query
+        
+    # Try to detect what the user is asking about
+    query_lower = query.lower()
+    
+    # If query contains pronouns, try to replace them with the appropriate entity
+    if any(pronoun in query_lower.split() for pronoun in ["it", "this", "that"]):
+        if entity_memory.get("last_flight"):
+            # Replace pronouns with the flight number
+            query = re.sub(r'\b(it|this|that)\b', entity_memory["last_flight"], query_lower, flags=re.IGNORECASE)
+    
+    # If query is about "there" and we have a destination, clarify
+    if "there" in query_lower.split() and entity_memory.get("last_destination"):
+        query = query.replace("there", entity_memory["last_destination"])
+    
+    # If query is about "from there" and we have an origin, clarify
+    if "from there" in query_lower and entity_memory.get("last_origin"):
+        query = query.replace("from there", f"from {entity_memory['last_origin']}")
+    
+    return query
+
+def qa_agent_respond(user_query: str, entity_memory=None) -> dict:
     """Processes user query, extracts flight number, and returns structured flight info."""
+    
+    # If this is a follow-up query and we have entity memory, try to resolve references
+    if entity_memory:
+        user_query = resolve_entity_references(user_query, entity_memory)
     
     # Check if query is about flights from an origin to a destination
     route_keywords = ["flight from", "flights from", "flying from", "travel from", "go from"]
@@ -453,7 +523,7 @@ def qa_agent_respond(user_query: str) -> dict:
         "flight_data": flight_info
     }
 
-def generate_chatbot_response(user_query: str) -> dict:
+def generate_chatbot_response(user_query: str, conversation_history=None, entity_memory=None) -> dict:
     """Generate a more conversational response based on the user query using LLM"""
     query_lower = user_query.lower()
     
@@ -481,8 +551,15 @@ def generate_chatbot_response(user_query: str) -> dict:
                      "- Are there any flights from New York to Paris?<br>"
                      "Just make sure to include either a flight number, destination, or both origin and destination in your question!"
         }
+    
+    # Check if this is a follow-up query
+    is_followup = False
+    if conversation_history and len(conversation_history) > 1:
+        is_followup = is_followup_query(user_query, conversation_history)
+        print(f"Is follow-up query: {is_followup}")  # Debug log
+    
     # For all other queries, first get the flight data
-    flight_data_response = qa_agent_respond(user_query)
+    flight_data_response = qa_agent_respond(user_query, entity_memory if is_followup else None)
     
     # If we have flight data or a list of flights, use LLM to generate a contextual response
     if "flight_data" in flight_data_response or "flights_list" in flight_data_response:
@@ -513,13 +590,23 @@ def generate_chatbot_response(user_query: str) -> dict:
                 if len(flights) > 5:
                     context += f"And {len(flights) - 5} more flights. "
             
+            # Prepare conversation history for LLM
+            history_context = ""
+            if conversation_history and len(conversation_history) > 1:
+                # Get last 3 exchanges (up to 6 messages)
+                recent_history = conversation_history[-6:]
+                history_context = "Previous conversation:\n"
+                for msg in recent_history:
+                    role = "User" if msg["role"] == "user" else "Assistant"
+                    history_context += f"{role}: {msg['content']}\n"
+            
             # Call the LLM to generate a conversational response
             response = client.chat.completions.create(
                 model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
                 messages=[
                     {"role": "system", 
-                     "content": "You are SkyQuery, a helpful and friendly flight information assistant. Respond conversationally to the user's query using the flight information provided. Make your response informative, natural, and engaging. Include all relevant flight details but in a conversational way. If appropriate, offer additional help or suggestions."},
-                    {"role": "user", "content": f"User query: {user_query}\nFlight information: {context}"}
+                     "content": "You are SkyQuery, a helpful and friendly flight information assistant. Respond conversationally to the user's query using the flight information provided. Make your response informative, natural, and engaging. Include all relevant flight details but in a conversational way. If appropriate, offer additional help or suggestions. Maintain context from previous exchanges."},
+                    {"role": "user", "content": f"User query: {user_query}\nFlight information: {context}\n{history_context}"}
                 ],
             )
             # Get the LLM's response
@@ -540,12 +627,22 @@ def generate_chatbot_response(user_query: str) -> dict:
     elif "answer" in flight_data_response and ("not found" in flight_data_response["answer"].lower() or 
                                               "no valid flight" in flight_data_response["answer"].lower()):
         try:
+            # Include conversation history for context
+            history_context = ""
+            if conversation_history and len(conversation_history) > 1:
+                # Get last 3 exchanges (up to 6 messages)
+                recent_history = conversation_history[-6:]
+                history_context = "Previous conversation:\n"
+                for msg in recent_history:
+                    role = "User" if msg["role"] == "user" else "Assistant"
+                    history_context += f"{role}: {msg['content']}\n"
+            
             response = client.chat.completions.create(
                 model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
                 messages=[
                     {"role": "system", 
                      "content": "You are SkyQuery, a helpful and friendly flight information assistant. The user asked about flight information, but no matching flights were found. Respond in a helpful, empathetic way, suggesting alternatives or clarifying what information you need."},
-                    {"role": "user", "content": f"User query: {user_query}\nNo flight information found."}
+                    {"role": "user", "content": f"User query: {user_query}\nNo flight information found.\n{history_context}"}
                 ],
             )        
             llm_response = response.choices[0].message.content.strip()
@@ -629,14 +726,63 @@ def delete_flight(flight_number):
     finally:
         mongo_client.close()
 
+def update_user_preferences(username, preferences):
+    """Update user preferences in the database"""
+    try:
+        mongo_client = get_db_connection()
+        db = mongo_client["Flights"]
+        users_collection = db["users"]
+        
+        # Check if user exists
+        if not users_collection.find_one({"username": username}):
+            return False, "User not found"
+        
+        # Update user preferences
+        result = users_collection.update_one(
+            {"username": username},
+            {"$set": {"preferences": preferences}}
+        )
+        
+        if result.modified_count > 0:
+            return True, "Preferences updated successfully"
+        else:
+            return False, "No changes made to preferences"
+    except Exception as e:
+        print(f"Update preferences error: {e}")
+        return False, f"An error occurred: {str(e)}"
+    finally:
+        mongo_client.close()
+
 # Routes
 @app.route('/')
 def index():
+    # Initialize entity memory if not exists
+    if 'entity_memory' not in session:
+        session['entity_memory'] = {
+            "last_flight": None,
+            "last_destination": None,
+            "last_origin": None
+        }
+    # Initialize conversation history if not exists
+    if 'conversation_history' not in session:
+        session['conversation_history'] = []
+        
     return render_template('index.html')
 
 @app.route('/chatbot')
 @login_required
 def chatbot():
+    # Initialize entity memory if not exists
+    if 'entity_memory' not in session:
+        session['entity_memory'] = {
+            "last_flight": None,
+            "last_destination": None,
+            "last_origin": None
+        }
+    # Initialize conversation history if not exists
+    if 'conversation_history' not in session:
+        session['conversation_history'] = []
+        
     return render_template('chatbot.html')
     
 @app.route('/register', methods=['GET', 'POST'])
@@ -681,6 +827,14 @@ def login():
             # Store user in session
             session['user'] = user_data
             
+            # Initialize entity memory and conversation history
+            session['entity_memory'] = {
+                "last_flight": None,
+                "last_destination": None,
+                "last_origin": None
+            }
+            session['conversation_history'] = []
+            
             # Redirect to admin dashboard if admin
             if user_data.get('role') == 'admin':
                 return redirect(url_for('admin_dashboard'))
@@ -696,7 +850,11 @@ def login():
 
 @app.route('/logout')
 def logout():
+    # Clear all session data
     session.pop('user', None)
+    session.pop('entity_memory', None)
+    session.pop('conversation_history', None)
+    
     flash('You have been logged out', 'success')
     return redirect(url_for('login'))
 
@@ -805,9 +963,50 @@ def chat():
     user_message = request.json.get('message', '')
     print(f"Received message: {user_message}")  # Debug log
     
-    # Generate response
-    response = generate_chatbot_response(user_message)
+    # Initialize conversation history if it doesn't exist
+    if 'conversation_history' not in session:
+        session['conversation_history'] = []
+    
+    # Initialize entity memory if it doesn't exist
+    if 'entity_memory' not in session:
+        session['entity_memory'] = {
+            "last_flight": None,
+            "last_destination": None,
+            "last_origin": None
+        }
+    
+    # Add user message to history
+    session['conversation_history'].append({"role": "user", "content": user_message})
+    
+    # Limit history to last 10 exchanges (20 messages)
+    if len(session['conversation_history']) > 20:
+        session['conversation_history'] = session['conversation_history'][-20:]
+    
+    # Generate response with conversation context
+    response = generate_chatbot_response(
+        user_message, 
+        session['conversation_history'],
+        session['entity_memory']
+    )
+    
+    # Add bot response to history
+    session['conversation_history'].append({"role": "assistant", "content": response["answer"]})
+    
+    # Update entity memory based on the response
+    if "flight_data" in response:
+        session['entity_memory']["last_flight"] = response["flight_data"]["flight_number"]
+        session['entity_memory']["last_destination"] = response["flight_data"]["destination"]
+        session['entity_memory']["last_origin"] = response["flight_data"]["origin"]
+    elif "flights_list" in response and response["flights_list"]:
+        # Just store the first flight's info for context
+        session['entity_memory']["last_destination"] = response["flights_list"][0]["destination"]
+        session['entity_memory']["last_origin"] = response["flights_list"][0]["origin"]
+    
+    # Save session to persist changes
+    session.modified = True
+    
     print(f"Generated response: {response}")  # Debug log
+    print(f"Updated entity memory: {session['entity_memory']}")  # Debug log
     
     return jsonify(response)
 
@@ -820,13 +1019,53 @@ def get_flights_api():
         return jsonify({"message": "No flights found in the database."}), 404
     return jsonify({"flights": flights}), 200
 
+@app.route('/api/preferences', methods=['GET', 'POST'])
+@login_required
+def user_preferences():
+    """API endpoint to get or update user preferences."""
+    if request.method == 'GET':
+        # Return current user preferences
+        if 'user' in session and 'preferences' in session['user']:
+            return jsonify({"preferences": session['user']['preferences']}), 200
+        return jsonify({"message": "No preferences found."}), 404
+    
+    elif request.method == 'POST':
+        # Update user preferences
+        if 'user' not in session:
+            return jsonify({"message": "User not logged in."}), 401
+        
+        new_preferences = request.json.get('preferences', {})
+        username = session['user']['username']
+        
+        success, message = update_user_preferences(username, new_preferences)
+        
+        if success:
+            # Update session with new preferences
+            session['user']['preferences'] = new_preferences
+            session.modified = True
+            return jsonify({"message": message, "preferences": new_preferences}), 200
+        else:
+            return jsonify({"message": message}), 400
+
+@app.route('/api/conversation/clear', methods=['POST'])
+@login_required
+def clear_conversation():
+    """API endpoint to clear conversation history."""
+    session['conversation_history'] = []
+    session['entity_memory'] = {
+        "last_flight": None,
+        "last_destination": None,
+        "last_origin": None
+    }
+    session.modified = True
+    return jsonify({"message": "Conversation history cleared."}), 200
+
 @app.route('/about')
 def about():
     """Render the about page"""
     return render_template('about.html')
+
 # Initialize admin user when the app starts
-
-
 def initialize_app():
     create_admin_user()
 
