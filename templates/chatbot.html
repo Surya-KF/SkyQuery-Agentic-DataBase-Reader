@@ -384,10 +384,10 @@
             </div>
             <p class="tagline">Your AI-powered flight assistant</p>
             <div class="user-nav">
-                {% if session.is_admin %}
+                {% if session.user and session.user.role == 'admin' %}
                 <a href="{{ url_for('admin_dashboard') }}" class="nav-link"><i class="fas fa-cog"></i> Admin Dashboard</a>
                 {% endif %}
-                <span class="user-greeting">Welcome, {{ session.user_name }}</span>
+                <span class="user-greeting">Welcome, {{ session.user.username }}</span>
                 <a href="{{ url_for('logout') }}" class="nav-link"><i class="fas fa-sign-out-alt"></i> Logout</a>
             </div>
         </header>
